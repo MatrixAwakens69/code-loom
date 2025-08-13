@@ -277,122 +277,112 @@ export default function VoiceChat({ projectId, currentUser, onClose }: VoiceChat
     }
   }, [])
 
+  const handleJoinVoiceChat = async () => {
+    await initializeVoiceChat()
+    if (localStream) {
+      // Create offer to all existing peers
+      peers.forEach(async (peer) => {
+        await createOffer(peer.userId, peer.userName)
+      })
+    }
+  }
+
+  const handleLeaveVoiceChat = () => {
+    disconnectVoiceChat()
+  }
+
   return (
-    <div className="fixed bottom-4 right-4 bg-editor-sidebar border border-editor-border rounded-lg shadow-lg w-80 max-h-96 flex flex-col">
+    <div className="fixed bottom-4 right-4 w-80 bg-editor-sidebar rounded-lg border border-editor-border shadow-lg z-50">
       {/* Header */}
-      <div className="p-4 border-b border-editor-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <h3 className="text-sm font-semibold text-white">Voice Chat</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      <div className="flex items-center justify-between p-4 border-b border-editor-border">
+        <div className="flex items-center space-x-2">
+          <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+          <h3 className="text-sm font-semibold text-white">Voice Chat</h3>
         </div>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-white transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4">
+      <div className="p-4">
         {!isConnected ? (
           <div className="text-center">
-            <Users className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-            <p className="text-sm text-gray-300 mb-4">
-              Join voice chat to talk with your team
+            <div className="flex justify-center mb-3">
+              <Users className="h-12 w-12 text-gray-400" />
+            </div>
+            <p className="text-gray-300 text-sm mb-4">
+              Join voice chat to talk with your team members
             </p>
             <button
-              onClick={initializeVoiceChat}
+              onClick={handleJoinVoiceChat}
               disabled={isInitializing}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
             >
               {isInitializing ? 'Connecting...' : 'Join Voice Chat'}
             </button>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Current User */}
-            <div className="flex items-center space-x-3 p-2 bg-editor-tab rounded-lg">
-              <img
-                src={currentUser.avatar || `https://ui-avatars.com/api/?name=${currentUser.name}&background=3b82f6&color=fff`}
-                alt={currentUser.name}
-                className="h-8 w-8 rounded-full"
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">{currentUser.name} (You)</p>
-                <p className="text-xs text-gray-400">
-                  {isMuted ? 'Muted' : 'Speaking'}
-                </p>
+            {/* Local Controls */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-300">You</span>
+                <div className={`w-2 h-2 rounded-full ${isMuted ? 'bg-red-500' : 'bg-green-500'}`} />
               </div>
-              <div className={`w-2 h-2 rounded-full ${isMuted ? 'bg-red-500' : 'bg-green-500'}`} />
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className={`p-2 rounded transition-colors ${
+                    isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
+                  }`}
+                >
+                  {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </button>
+                <button
+                  onClick={() => setIsDeafened(!isDeafened)}
+                  className={`p-2 rounded transition-colors ${
+                    isDeafened ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
+                  }`}
+                >
+                  {isDeafened ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             {/* Connected Peers */}
-            {Array.from(peers.values()).map(peer => (
-              <div key={peer.userId} className="flex items-center space-x-3 p-2 bg-editor-tab rounded-lg">
-                <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-xs text-white font-medium">
-                    {peer.userName.charAt(0).toUpperCase()}
-                  </span>
+            {peers.size > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Connected Users</h4>
+                <div className="space-y-2">
+                  {Array.from(peers.values()).map((peer) => (
+                    <div key={peer.userId} className="flex items-center justify-between p-2 bg-editor-bg rounded">
+                      <span className="text-sm text-gray-300">{peer.userName}</span>
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-2 h-2 rounded-full ${peer.isConnected ? 'bg-green-500' : 'bg-gray-500'}`} />
+                        <span className={`text-xs ${peer.isMuted ? 'text-red-400' : 'text-green-400'}`}>
+                          {peer.isMuted ? 'Muted' : 'Active'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-white">{peer.userName}</p>
-                  <p className="text-xs text-gray-400">
-                    {peer.isConnected ? 'Connected' : 'Connecting...'}
-                  </p>
-                </div>
-                <div className={`w-2 h-2 rounded-full ${peer.isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-              </div>
-            ))}
-
-            {peers.size === 0 && (
-              <div className="text-center py-4">
-                <p className="text-sm text-gray-400">No other users in voice chat</p>
               </div>
             )}
+
+            {/* Disconnect Button */}
+            <button
+              onClick={handleLeaveVoiceChat}
+              className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              Leave Voice Chat
+            </button>
           </div>
         )}
       </div>
-
-      {/* Controls */}
-      {isConnected && (
-        <div className="p-4 border-t border-editor-border">
-          <div className="flex items-center justify-center space-x-2">
-            <button
-              onClick={toggleMute}
-              className={`p-2 rounded-lg transition-colors ${
-                isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
-              }`}
-              title={isMuted ? 'Unmute' : 'Mute'}
-            >
-              {isMuted ? <MicOff className="h-4 w-4 text-white" /> : <Mic className="h-4 w-4 text-white" />}
-            </button>
-
-            <button
-              onClick={toggleDeafen}
-              className={`p-2 rounded-lg transition-colors ${
-                isDeafened ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
-              }`}
-              title={isDeafened ? 'Enable Audio' : 'Disable Audio'}
-            >
-              {isDeafened ? <VolumeX className="h-4 w-4 text-white" /> : <Volume2 className="h-4 w-4 text-white" />}
-            </button>
-
-            <button
-              onClick={disconnectVoiceChat}
-              className="p-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-              title="Leave Voice Chat"
-            >
-              <PhoneOff className="h-4 w-4 text-white" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Hidden audio element for local stream */}
-      <audio ref={localAudioRef} autoPlay muted />
     </div>
   )
 }

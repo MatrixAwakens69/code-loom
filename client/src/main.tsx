@@ -6,9 +6,12 @@ import './index.css'
 // Import Firebase configuration first to ensure it's initialized
 import './config/firebase'
 
+// Determine the base path for routing
+const basePath = import.meta.env.BASE_URL || '/'
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basePath}>
       <App />
     </BrowserRouter>
   </React.StrictMode>,

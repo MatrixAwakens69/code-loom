@@ -1,34 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useSocket } from '../contexts/SocketContext'
+import { ArrowLeft, Users, Mic, MicOff, Save, Plus, X } from 'lucide-react'
 import MonacoEditor from '../components/MonacoEditor'
 import FileExplorer from '../components/FileExplorer'
-import VoiceChat from '../components/VoiceChat'
 import UsersList from '../components/UsersList'
-import { 
-  ArrowLeft, 
-  Save, 
-  Users, 
-  Mic, 
-  MicOff,
-  Settings,
-  Play,
-  Folder,
-  Plus,
-  X
-} from 'lucide-react'
+import VoiceChat from '../components/VoiceChat'
+import Terminal from '../components/Terminal'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-
-interface ProjectFile {
-  name: string
-  path: string
-  content: string
-  language: string
-  createdAt: string
-  updatedAt: string
-}
 
 interface Project {
   _id: string
@@ -50,38 +30,53 @@ interface Project {
     permission: 'view' | 'edit'
     joinedAt: string
   }>
-  files: ProjectFile[]
+  files: Array<{
+    name: string
+    path: string
+    content: string
+    language: string
+    createdAt: string
+    updatedAt: string
+  }>
   userPermission: 'view' | 'edit'
+}
+
+interface ActiveUser {
+  _id: string
+  name: string
+  email: string
+  avatar?: string
+}
+
+interface ProjectFile {
+  name: string
+  path: string
+  content: string
+  language: string
   createdAt: string
   updatedAt: string
 }
 
-interface ActiveUser {
-  id: string
-  name: string
-  avatar?: string
-}
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'
 
 export default function ProjectEditor() {
-  const { projectId } = useParams<{ projectId: string }>()
+  const { projectId } = useParams()
   const { user } = useAuth()
-  const { socket, connected } = useSocket()
-  
   const [project, setProject] = useState<Project | null>(null)
-  const [activeFile, setActiveFile] = useState<ProjectFile | null>(null)
-  const [fileContent, setFileContent] = useState('')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([])
-  const [showVoiceChat, setShowVoiceChat] = useState(false)
+  const [activeFile, setActiveFile] = useState<string>('/index.js')
+  const [connected, setConnected] = useState(false)
+  const [activeUsers, setActiveUsers] = useState<any[]>([])
   const [showUsersList, setShowUsersList] = useState(false)
+  const [showVoiceChat, setShowVoiceChat] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(250)
+  const [isResizing, setIsResizing] = useState(false)
   const [showNewFileModal, setShowNewFileModal] = useState(false)
-
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
-  const resizeRef = useRef<HTMLDivElement>(null)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(300)
+  const [isResizingRight, setIsResizingRight] = useState(false)
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const rightSidebarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (projectId) {
@@ -89,119 +84,37 @@ export default function ProjectEditor() {
     }
   }, [projectId])
 
-  useEffect(() => {
-    if (socket && projectId && connected) {
-      // Join project room
-      socket.emit('join-project', projectId)
-
-      // Listen for active users updates
-      socket.on('active-users', (users: ActiveUser[]) => {
-        setActiveUsers(users)
-      })
-
-      socket.on('user-joined', (data: { user: ActiveUser }) => {
-        setActiveUsers(prev => [...prev.filter(u => u.id !== data.user.id), data.user])
-        toast.success(`${data.user.name} joined the project`)
-      })
-
-      socket.on('user-left', (data: { user: ActiveUser }) => {
-        setActiveUsers(prev => prev.filter(u => u.id !== data.user.id))
-        toast(`${data.user.name} left the project`, { icon: '👋' })
-      })
-
-      // Listen for file changes from other users
-      socket.on('file-changed', (data: { filePath: string, content: string, user: { name: string } }) => {
-        if (activeFile && activeFile.path === data.filePath) {
-          setFileContent(data.content)
-          toast(`File updated by ${data.user.name}`, { icon: '📝' })
-        }
-      })
-
-      return () => {
-        socket.emit('leave-project', projectId)
-        socket.off('active-users')
-        socket.off('user-joined')
-        socket.off('user-left')
-        socket.off('file-changed')
-      }
-    }
-  }, [socket, projectId, connected, activeFile])
-
   const fetchProject = async () => {
     try {
       const response = await axios.get(`${API_URL}/api/projects/${projectId}`)
-      const projectData = response.data.project
-      setProject(projectData)
-      
-      // Load first file by default
-      if (projectData.files.length > 0) {
-        const firstFile = projectData.files[0]
-        setActiveFile(firstFile)
-        setFileContent(firstFile.content)
-      }
-    } catch (error: any) {
+      setProject(response.data.project)
+      setActiveFile(response.data.project.files[0]?.path || '/index.js')
+    } catch (error) {
       console.error('Failed to fetch project:', error)
-      toast.error(error.response?.data?.error || 'Failed to load project')
+      toast.error('Failed to load project')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleFileSelect = (file: ProjectFile) => {
-    setActiveFile(file)
-    setFileContent(file.content)
+  const handleFileSelect = (filePath: string) => {
+    setActiveFile(filePath)
   }
 
-  const handleContentChange = (newContent: string) => {
-    setFileContent(newContent)
-    
-    // Emit real-time changes to other users
-    if (socket && activeFile && project) {
-      socket.emit('file-change', {
-        projectId: project._id,
-        filePath: activeFile.path,
-        content: newContent
-      })
-    }
+  const handleManualSave = async () => {
+    if (!project || project.userPermission !== 'edit') return
 
-    // Auto-save after 2 seconds of inactivity
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-    
-    saveTimeoutRef.current = setTimeout(() => {
-      handleSave(newContent)
-    }, 2000)
-  }
-
-  const handleSave = async (content?: string) => {
-    if (!activeFile || !project || project.userPermission !== 'edit') return
-
-    setSaving(true)
     try {
-      await axios.put(
-        `${API_URL}/api/projects/${project._id}/files${activeFile.path}`,
-        {
-          content: content || fileContent,
-          language: activeFile.language
-        }
-      )
-      
-      // Update local file reference
-      if (project.files) {
-        const fileIndex = project.files.findIndex(f => f.path === activeFile.path)
-        if (fileIndex !== -1) {
-          const updatedFiles = [...project.files]
-          updatedFiles[fileIndex] = {
-            ...updatedFiles[fileIndex],
-            content: content || fileContent,
-            updatedAt: new Date().toISOString()
-          }
-          setProject({ ...project, files: updatedFiles })
-        }
-      }
-      
-      toast.success('File saved', { duration: 1000 })
+      setSaving(true)
+      const activeFileData = project.files.find(f => f.path === activeFile)
+      if (!activeFileData) return
+
+      await axios.put(`${API_URL}/api/projects/${projectId}/files/${encodeURIComponent(activeFile)}`, {
+        content: activeFileData.content,
+        language: activeFileData.language
+      })
+
+      toast.success('File saved successfully')
     } catch (error) {
       console.error('Failed to save file:', error)
       toast.error('Failed to save file')
@@ -210,58 +123,107 @@ export default function ProjectEditor() {
     }
   }
 
-  const handleManualSave = () => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-    handleSave()
-  }
-
   const createNewFile = async (fileName: string, language: string) => {
     if (!project || project.userPermission !== 'edit') return
 
     try {
       const filePath = `/${fileName}`
-      await axios.put(
-        `${API_URL}/api/projects/${project._id}/files${filePath}`,
-        {
-          content: '',
-          language
-        }
-      )
+      const now = new Date().toISOString()
+      const newFile: ProjectFile = {
+        name: fileName,
+        path: filePath,
+        content: '',
+        language,
+        createdAt: now,
+        updatedAt: now
+      }
 
-      // Refresh project to get updated files
-      await fetchProject()
+      // Add to local state first
+      setProject(prev => {
+        if (!prev) return prev
+        return { ...prev, files: [...prev.files, newFile] }
+      })
+
+      // Set as active file
+      setActiveFile(filePath)
+
+      // Save to server
+      await axios.put(`${API_URL}/api/projects/${projectId}/files/${encodeURIComponent(filePath)}`, {
+        content: '',
+        language
+      })
+
       toast.success('File created successfully')
+      setShowNewFileModal(false)
     } catch (error) {
       console.error('Failed to create file:', error)
       toast.error('Failed to create file')
     }
   }
 
-  // Handle sidebar resize
-  const handleMouseDown = (e: React.MouseEvent) => {
+  // Left sidebar resize handlers
+  const handleLeftMouseDown = (e: React.MouseEvent) => {
+    setIsResizing(true)
     e.preventDefault()
-    const startX = e.clientX
-    const startWidth = sidebarWidth
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = startWidth + (e.clientX - startX)
-      setSidebarWidth(Math.max(200, Math.min(600, newWidth)))
-    }
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
   }
+
+  const handleLeftMouseMove = (e: MouseEvent) => {
+    if (!isResizing) return
+    
+    const newWidth = e.clientX
+    if (newWidth > 200 && newWidth < 600) {
+      setSidebarWidth(newWidth)
+    }
+  }
+
+  const handleLeftMouseUp = () => {
+    setIsResizing(false)
+  }
+
+  // Right sidebar resize handlers
+  const handleRightMouseDown = (e: React.MouseEvent) => {
+    setIsResizingRight(true)
+    e.preventDefault()
+  }
+
+  const handleRightMouseMove = (e: MouseEvent) => {
+    if (!isResizingRight) return
+    
+    const newWidth = window.innerWidth - e.clientX
+    if (newWidth > 200 && newWidth < 600) {
+      setRightSidebarWidth(newWidth)
+    }
+  }
+
+  const handleRightMouseUp = () => {
+    setIsResizingRight(false)
+  }
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleLeftMouseMove)
+      document.addEventListener('mouseup', handleLeftMouseUp)
+      return () => {
+        document.removeEventListener('mousemove', handleLeftMouseMove)
+        document.removeEventListener('mouseup', handleLeftMouseUp)
+      }
+    }
+  }, [isResizing])
+
+  useEffect(() => {
+    if (isResizingRight) {
+      document.addEventListener('mousemove', handleRightMouseMove)
+      document.addEventListener('mouseup', handleRightMouseUp)
+      return () => {
+        document.removeEventListener('mousemove', handleRightMouseMove)
+        document.removeEventListener('mouseup', handleRightMouseUp)
+      }
+    }
+  }, [isResizingRight])
 
   if (loading) {
     return (
-      <div className="h-screen bg-editor-bg flex items-center justify-center">
+      <div className="h-screen bg-editor-bg flex items-center justify-center text-white">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
       </div>
     )
@@ -271,14 +233,31 @@ export default function ProjectEditor() {
     return (
       <div className="h-screen bg-editor-bg flex items-center justify-center text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold mb-4">Project not found</h2>
-          <Link to="/dashboard" className="btn-primary">
-            Return to Dashboard
+          <h2 className="text-2xl font-bold mb-4">Project Not Found</h2>
+          <p className="text-gray-400 mb-6">The project you're looking for doesn't exist or you don't have access to it.</p>
+          <Link
+            to="/dashboard"
+            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
+          >
+            Back to Dashboard
           </Link>
         </div>
       </div>
     )
   }
+
+  // Convert project files to ProjectFile format for FileExplorer
+  const projectFiles: ProjectFile[] = project.files.map(file => ({
+    name: file.name,
+    path: file.path,
+    content: file.content,
+    language: file.language,
+    createdAt: file.createdAt || new Date().toISOString(),
+    updatedAt: file.updatedAt || new Date().toISOString()
+  }))
+
+  // Find the active file object
+  const activeFileObj = projectFiles.find(f => f.path === activeFile)
 
   return (
     <div className="h-screen bg-editor-bg text-white flex flex-col overflow-hidden">
@@ -335,9 +314,10 @@ export default function ProjectEditor() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
+        {/* Resizable Sidebar */}
         <div 
-          className="bg-editor-sidebar border-r border-editor-border flex flex-col"
+          ref={sidebarRef}
+          className="bg-editor-sidebar border-r border-editor-border flex flex-col relative"
           style={{ width: sidebarWidth }}
         >
           {/* File Explorer Header */}
@@ -358,9 +338,9 @@ export default function ProjectEditor() {
           {/* File Explorer */}
           <div className="flex-1 overflow-y-auto">
             <FileExplorer
-              files={project.files}
-              activeFile={activeFile}
-              onFileSelect={handleFileSelect}
+              files={projectFiles}
+              activeFile={activeFileObj || null}
+              onFileSelect={(file) => setActiveFile(file.path)}
             />
           </div>
 
@@ -377,64 +357,89 @@ export default function ProjectEditor() {
               </span>
             </div>
           </div>
+
+          {/* Resize Handle */}
+          <div
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 transition-colors"
+            onMouseDown={handleLeftMouseDown}
+          />
         </div>
 
-        {/* Resize Handle */}
-        <div
-          ref={resizeRef}
-          className="w-1 bg-editor-border hover:bg-blue-500 cursor-col-resize transition-colors"
-          onMouseDown={handleMouseDown}
-        />
-
-        {/* Main Editor Area */}
+        {/* Main Content Area */}
         <div className="flex-1 flex flex-col">
-          {activeFile ? (
-            <>
-              {/* File Tab */}
-              <div className="bg-editor-tab border-b border-editor-border px-4 py-2 flex items-center">
-                <span className="text-sm">{activeFile.name}</span>
-                {saving && (
-                  <span className="ml-2 text-xs text-gray-400">Saving...</span>
-                )}
+          {/* Editor Tabs */}
+          <div className="bg-editor-tab border-b border-editor-border px-4 py-2">
+            <div className="flex items-center space-x-2">
+              <div className="bg-editor-bg px-3 py-1 rounded-t text-sm">
+                {activeFile.split('/').pop()}
               </div>
-
-              {/* Editor */}
-              <div className="flex-1">
-                <MonacoEditor
-                  value={fileContent}
-                  language={activeFile.language}
-                  onChange={handleContentChange}
-                  readOnly={project.userPermission !== 'edit'}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center text-gray-400">
-                <Folder className="h-16 w-16 mx-auto mb-4" />
-                <p>Select a file to start editing</p>
-              </div>
+              <button className="text-gray-400 hover:text-white transition-colors">
+                <Plus className="h-4 w-4" />
+              </button>
             </div>
-          )}
+          </div>
+
+          {/* Monaco Editor */}
+          <div className="flex-1">
+            <MonacoEditor
+              value={activeFileObj?.content || ''}
+              language={activeFileObj?.language || 'javascript'}
+              onChange={(content) => {
+                // Update the file content in local state
+                setProject(prev => {
+                  if (!prev) return prev
+                  const newFiles = prev.files.map(f => 
+                    f.path === activeFile ? { ...f, content } : f
+                  )
+                  return { ...prev, files: newFiles }
+                })
+              }}
+              readOnly={project.userPermission !== 'edit'}
+            />
+          </div>
+
+          {/* Terminal */}
+          <div className="h-64 bg-editor-sidebar border-t border-editor-border">
+            <Terminal projectId={projectId!} />
+          </div>
         </div>
 
         {/* Right Sidebar - Users List */}
         {showUsersList && (
-          <div className="w-64 bg-editor-sidebar border-l border-editor-border">
-            <UsersList 
-              users={activeUsers} 
+          <div 
+            ref={rightSidebarRef}
+            className="bg-editor-sidebar border-l border-editor-border flex flex-col relative"
+            style={{ width: rightSidebarWidth }}
+          >
+            <UsersList
+              users={[project.owner, ...project.members.map(m => m.user)].map(user => ({
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar
+              }))}
               project={project}
               onClose={() => setShowUsersList(false)}
+            />
+            {/* Resize Handle */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 transition-colors"
+              onMouseDown={handleRightMouseDown}
             />
           </div>
         )}
       </div>
 
-      {/* Voice Chat */}
+      {/* Voice Chat Overlay */}
       {showVoiceChat && (
         <VoiceChat
-          projectId={project._id}
-          currentUser={user!}
+          projectId={projectId!}
+          currentUser={{
+            id: user?._id || '',
+            name: user?.name || '',
+            email: user?.email || '',
+            avatar: user?.avatar
+          }}
           onClose={() => setShowVoiceChat(false)}
         />
       )}
@@ -464,7 +469,6 @@ function NewFileModal({ onClose, onCreateFile }: NewFileModalProps) {
     e.preventDefault()
     if (fileName.trim()) {
       onCreateFile(fileName.trim(), language)
-      onClose()
     }
   }
 

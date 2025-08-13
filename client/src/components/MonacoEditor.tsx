@@ -43,7 +43,7 @@ export default function MonacoEditor({ value, language, onChange, readOnly = fal
     if (socket && editorRef.current) {
       // Listen for cursor updates from other users
       socket.on('cursor-updated', (data: UserCursor & { filePath: string }) => {
-        if (data.user.id !== user?.id) {
+        if (data.user.id !== user?._id) {
           setUserCursors(prev => {
             const filtered = prev.filter(cursor => cursor.user.id !== data.user.id)
             return [...filtered, {

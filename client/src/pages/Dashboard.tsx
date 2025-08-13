@@ -257,7 +257,7 @@ export default function Dashboard() {
               <ProjectCard 
                 key={project._id} 
                 project={project} 
-                currentUserId={user!.id}
+                currentUserId={user!._id}
                 onInvite={() => {
                   setSelectedProject(project._id)
                   setShowInviteModal(true)

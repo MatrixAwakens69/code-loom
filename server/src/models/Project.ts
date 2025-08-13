@@ -1,7 +1,7 @@
-import mongoose, { Document, Schema } from 'mongoose'
+import mongoose, { Document, Schema, Types } from 'mongoose'
 
 export interface IProjectMember extends Document {
-  user: mongoose.Types.ObjectId
+  user: Types.ObjectId
   permission: 'view' | 'edit'
   joinedAt: Date
 }
@@ -9,7 +9,7 @@ export interface IProjectMember extends Document {
 export interface IProjectInvite extends Document {
   email: string
   permission: 'view' | 'edit'
-  invitedBy: mongoose.Types.ObjectId
+  invitedBy: Types.ObjectId
   invitedAt: Date
   status: 'pending' | 'accepted' | 'declined'
 }
@@ -26,11 +26,11 @@ export interface IProjectFile extends Document {
 export interface IProject extends Document {
   name: string
   description?: string
-  owner: mongoose.Types.ObjectId
+  owner: Types.ObjectId
+  isPublic: boolean
   members: IProjectMember[]
   invites: IProjectInvite[]
   files: IProjectFile[]
-  isPublic: boolean
   createdAt: Date
   updatedAt: Date
 }

@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import { connectDatabase } from './config/database';
 import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
+import terminalRoutes from './routes/terminal';
 import { setupCollaboration } from './collaboration/yjs-server';
 
 dotenv.config();
@@ -41,6 +42,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/projects/:projectId/terminal', terminalRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
