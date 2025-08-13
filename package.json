@@ -1,0 +1,16 @@
+{
+  "name": "code-loom",
+  "version": "1.0.0",
+  "description": "A real-time collaborative code editor with voice chat",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "license": "MIT"
+}

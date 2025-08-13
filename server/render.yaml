@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: codeloom-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGODB_URI
+        fromDatabase:
+          name: codeloom-mongodb
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        value: https://your-github-username.github.io/code-loom
+
+databases:
+  - name: codeloom-mongodb
+    databaseName: codeloom
+    user: codeloom
