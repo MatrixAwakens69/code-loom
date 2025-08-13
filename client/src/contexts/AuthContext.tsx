@@ -1,96 +1,113 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { 
+  User as FirebaseUser, 
+  signInWithPopup, 
+  signOut as firebaseSignOut,
+  onAuthStateChanged
+} from 'firebase/auth'
+import { auth, googleProvider } from '../config/firebase'
 import axios from 'axios'
-import toast from 'react-hot-toast'
 
 interface User {
-  id: string
-  email: string
+  _id: string
   name: string
+  email: string
   avatar?: string
-  googleId: string
 }
 
 interface AuthContextType {
   user: User | null
+  firebaseUser: FirebaseUser | null
   loading: boolean
-  login: () => void
-  logout: () => void
+  login: () => Promise<void>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
 
 interface AuthProviderProps {
   children: ReactNode
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    checkAuthStatus()
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setFirebaseUser(firebaseUser)
+      
+      if (firebaseUser) {
+        try {
+          // Get the ID token
+          const idToken = await firebaseUser.getIdToken()
+          
+          // Set the token in axios headers
+          axios.defaults.headers.common['Authorization'] = `Bearer ${idToken}`
+          
+          // Fetch user data from your backend
+          const response = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/auth/me`)
+          setUser(response.data.user)
+        } catch (error) {
+          console.error('Failed to fetch user data:', error)
+          setUser(null)
+        }
+      } else {
+        setUser(null)
+        delete axios.defaults.headers.common['Authorization']
+      }
+      
+      setLoading(false)
+    })
+
+    return unsubscribe
   }, [])
 
-  const checkAuthStatus = async () => {
+  const login = async () => {
     try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        setLoading(false)
-        return
+      setLoading(true)
+      const result = await signInWithPopup(auth, googleProvider)
+      
+      if (result.user) {
+        // Get the ID token
+        const idToken = await result.user.getIdToken()
+        
+        // Set the token in axios headers
+        axios.defaults.headers.common['Authorization'] = `Bearer ${idToken}`
+        
+        // The user data will be fetched in the useEffect above
       }
-
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      const response = await axios.get(`${API_URL}/api/auth/me`)
-      setUser(response.data.user)
     } catch (error) {
-      console.error('Auth check failed:', error)
-      localStorage.removeItem('token')
-      delete axios.defaults.headers.common['Authorization']
+      console.error('Login error:', error)
+      throw error
     } finally {
       setLoading(false)
     }
   }
 
-  const login = () => {
-    window.location.href = `${API_URL}/api/auth/google`
-  }
-
   const logout = async () => {
     try {
-      await axios.post(`${API_URL}/api/auth/logout`)
-      localStorage.removeItem('token')
-      delete axios.defaults.headers.common['Authorization']
+      await firebaseSignOut(auth)
       setUser(null)
-      toast.success('Logged out successfully')
+      delete axios.defaults.headers.common['Authorization']
     } catch (error) {
-      console.error('Logout failed:', error)
-      toast.error('Logout failed')
+      console.error('Logout error:', error)
+      throw error
     }
   }
 
-  // Handle OAuth callback
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const token = urlParams.get('token')
-    const error = urlParams.get('error')
-
-    if (token) {
-      localStorage.setItem('token', token)
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      checkAuthStatus()
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-    } else if (error) {
-      toast.error('Authentication failed')
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-    }
-  }, [])
-
-  const value = {
+  const value: AuthContextType = {
     user,
+    firebaseUser,
     loading,
     login,
     logout
@@ -101,12 +118,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
 }

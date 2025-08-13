@@ -1,306 +1,276 @@
 # CodeLoom Setup Guide
 
-This guide will help you set up and deploy CodeLoom, a real-time collaborative code editor with voice chat.
+This guide will help you set up CodeLoom for local development and production deployment.
 
-## Prerequisites
+## 🚀 Quick Start
 
-- Node.js 18 or higher
-- MongoDB (local or cloud)
-- Google OAuth credentials
-- Git
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd code-loom
+   ```
 
-## Local Development Setup
+2. **Install dependencies**
+   ```bash
+   npm run install:all
+   ```
 
-### 1. Clone the Repository
+3. **Set up environment variables** (see sections below)
+
+4. **Start development servers**
+   ```bash
+   npm run dev
+   ```
+
+## 🔥 Firebase Setup (Authentication)
+
+### Step 1: Create Firebase Project
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Click "Create a project" or "Add project"
+3. Enter project name: `codeloom` (or your preferred name)
+4. Choose whether to enable Google Analytics (optional)
+5. Click "Create project"
+
+### Step 2: Enable Authentication
+
+1. In the left sidebar, click "Authentication"
+2. Click "Get started" or "Sign-in method" tab
+3. Click on "Google" provider
+4. Toggle "Enable" to turn it on
+5. Choose your project support email
+6. Click "Save"
+
+### Step 3: Get Firebase Config
+
+1. Click the gear icon (⚙️) next to "Project Overview"
+2. Select "Project settings"
+3. Scroll down to "Your apps" section
+4. Click "Add app" and choose web (</>)
+5. Register your app with a nickname (e.g., "CodeLoom Web")
+6. Copy the config object
+
+### Step 4: Get Service Account Key
+
+1. In Project settings, go to "Service accounts" tab
+2. Click "Generate new private key"
+3. Download the JSON file
+4. **Keep this file secure** - it contains sensitive credentials
+
+## 🗄️ MongoDB Atlas Setup
+
+### Step 1: Create MongoDB Atlas Account
+
+1. Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
+2. Sign up for a free account
+3. Create a new project
+
+### Step 2: Create Cluster
+
+1. Click "Build a Database"
+2. Choose "FREE" tier (M0)
+3. Select your preferred cloud provider and region
+4. Click "Create"
+
+### Step 3: Set Up Database Access
+
+1. In the left sidebar, click "Database Access"
+2. Click "Add New Database User"
+3. Choose "Password" authentication
+4. Enter username and password
+5. Set privileges to "Read and write to any database"
+6. Click "Add User"
+
+### Step 4: Set Up Network Access
+
+1. In the left sidebar, click "Network Access"
+2. Click "Add IP Address"
+3. For development: Click "Allow Access from Anywhere" (0.0.0.0/0)
+4. For production: Add your specific IP addresses
+5. Click "Confirm"
+
+### Step 5: Get Connection String
+
+1. Click "Connect" on your cluster
+2. Choose "Connect your application"
+3. Copy the connection string
+4. Replace `<password>` with your database user password
+5. Replace `<dbname>` with `codeloom`
+
+## 📁 Environment Variables
+
+### Client (.env)
+
+Create `client/.env`:
 
 ```bash
-git clone https://github.com/your-username/code-loom.git
-cd code-loom
+# Firebase Configuration
+VITE_FIREBASE_API_KEY=your_firebase_api_key_here
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
+VITE_FIREBASE_APP_ID=your_app_id
+
+# Server URL
+VITE_SERVER_URL=http://localhost:5000
 ```
 
-### 2. Install Dependencies
+### Server (.env)
+
+Create `server/.env`:
 
 ```bash
-# Install root dependencies (for parallel development)
-npm install
+# MongoDB Connection
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/codeloom?retryWrites=true&w=majority
 
-# Install server dependencies
-cd server
-npm install
-
-# Install client dependencies
-cd ../client
-npm install
-```
-
-### 3. Environment Configuration
-
-#### Server Environment Variables
-
-Create `server/.env` file:
-
-```env
-# Database
-MONGODB_URI=mongodb://localhost:27017/codeloom
-
-# Google OAuth (get from Google Cloud Console)
-GOOGLE_CLIENT_ID=your_google_client_id_here
-GOOGLE_CLIENT_SECRET=your_google_client_secret_here
-
-# JWT & Session Secrets (generate random strings)
-JWT_SECRET=your_jwt_secret_key_here_minimum_32_characters
-SESSION_SECRET=your_session_secret_here_minimum_32_characters
-
-# Frontend URL
-CLIENT_URL=http://localhost:3000
+# Firebase Admin Configuration
+FIREBASE_PROJECT_ID=your_firebase_project_id
+FIREBASE_SERVICE_ACCOUNT_KEY={"type":"service_account","project_id":"your_project","private_key_id":"...","private_key":"...","client_email":"...","client_id":"...","auth_uri":"...","token_uri":"...","auth_provider_x509_cert_url":"...","client_x509_cert_url":"..."}
 
 # Server Configuration
 PORT=5000
-NODE_ENV=development
+CLIENT_URL=http://localhost:5173
+SERVER_URL=http://localhost:5000
+
+# JWT Secret (for any additional JWT needs)
+JWT_SECRET=your_random_jwt_secret_here
 ```
 
-#### Client Environment Variables
+## 🛠️ Development Setup
 
-Create `client/.env` file:
+### Prerequisites
 
-```env
-VITE_API_URL=http://localhost:5000
-```
+- Node.js 18+ 
+- npm or yarn
+- Git
 
-### 4. Google OAuth Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Google+ API
-4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"
-5. Configure OAuth consent screen
-6. Add authorized redirect URIs:
-   - For local development: `http://localhost:5000/api/auth/google/callback`
-   - For production: `https://your-backend-domain.com/api/auth/google/callback`
-7. Copy Client ID and Client Secret to your `.env` file
-
-### 5. MongoDB Setup
-
-#### Option A: Local MongoDB
-```bash
-# Install MongoDB (varies by OS)
-# Ubuntu/Debian:
-sudo apt-get install mongodb
-
-# macOS with Homebrew:
-brew install mongodb/brew/mongodb-community
-
-# Start MongoDB
-sudo systemctl start mongod
-```
-
-#### Option B: MongoDB Atlas (Cloud)
-1. Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
-2. Create free account and cluster
-3. Get connection string
-4. Add to `MONGODB_URI` in `.env`
-
-### 6. Start Development Servers
+### Install Dependencies
 
 ```bash
-# Start both frontend and backend (from root directory)
+# Install all dependencies (client + server)
+npm run install:all
+
+# Or install separately:
+npm install                    # Root dependencies
+cd client && npm install      # Client dependencies
+cd ../server && npm install   # Server dependencies
+```
+
+### Start Development Servers
+
+```bash
+# Start both client and server
 npm run dev
 
-# Or start individually:
-# Backend only
-cd server && npm run dev
-
-# Frontend only
-cd client && npm run dev
+# Or start separately:
+cd server && npm run dev      # Backend (port 5000)
+cd ../client && npm run dev   # Frontend (port 5173)
 ```
 
-Visit `http://localhost:3000` to see the application.
+### Build for Production
 
-## Production Deployment
+```bash
+# Build both client and server
+npm run build
 
-### Frontend Deployment (GitHub Pages)
+# Or build separately:
+cd client && npm run build    # Frontend build
+cd ../server && npm run build # Backend build
+```
 
-1. **Repository Setup**
+## 🚀 Production Deployment
+
+### Frontend (GitHub Pages)
+
+1. **Push to GitHub**
    ```bash
-   # Make sure your code is pushed to GitHub
    git add .
    git commit -m "Initial commit"
    git push origin main
    ```
 
-2. **Configure GitHub Secrets**
-   - Go to your GitHub repository
-   - Settings → Secrets and variables → Actions
-   - Add these secrets:
-     - `VITE_API_URL`: Your backend URL (e.g., `https://your-app.onrender.com`)
-     - `CUSTOM_DOMAIN` (optional): Custom domain if you have one
+2. **Enable GitHub Pages**
+   - Go to your repository settings
+   - Scroll to "Pages" section
+   - Select "Deploy from a branch"
+   - Choose "main" branch and "/docs" folder
+   - Click "Save"
 
-3. **Enable GitHub Pages**
-   - Repository Settings → Pages
-   - Source: "GitHub Actions"
+3. **Update Environment Variables**
+   - Update `VITE_SERVER_URL` to your production backend URL
+   - Update Firebase config for production domain
 
-4. **Update Vite Config**
-   Update `client/vite.config.ts` base path:
-   ```typescript
-   export default defineConfig({
-     plugins: [react()],
-     base: '/code-loom/', // Replace with your repository name
-     // ... rest of config
-   })
-   ```
-
-5. **Deploy**
-   - Push to main branch
-   - GitHub Actions will automatically build and deploy
-   - Access at: `https://your-username.github.io/code-loom/`
-
-### Backend Deployment (Render)
+### Backend (Render)
 
 1. **Create Render Account**
-   - Go to [Render](https://render.com)
+   - Go to [Render](https://render.com/)
    - Sign up with GitHub
 
-2. **Create MongoDB Database**
-   - In Render dashboard: "New" → "PostgreSQL" → "MongoDB"
-   - Choose free tier
-   - Note the connection string
-
-3. **Deploy Backend**
-   - "New" → "Web Service"
+2. **Deploy Backend**
+   - Click "New +" → "Web Service"
    - Connect your GitHub repository
    - Configure:
-     - **Root Directory**: `server`
-     - **Build Command**: `npm install && npm run build`
-     - **Start Command**: `npm start`
-     - **Node Version**: 18
+     - Name: `codeloom-backend`
+     - Environment: `Node`
+     - Build Command: `npm install && npm run build`
+     - Start Command: `npm start`
+     - Plan: Free
 
-4. **Environment Variables**
-   Add these in Render dashboard:
-   ```
-   NODE_ENV=production
-   PORT=5000
-   MONGODB_URI=your_mongodb_connection_string
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
-   JWT_SECRET=your_jwt_secret_32_plus_characters
-   SESSION_SECRET=your_session_secret_32_plus_characters
-   CLIENT_URL=https://your-username.github.io/code-loom
-   ```
+3. **Set Environment Variables**
+   - Add all variables from `server/.env`
+   - Update URLs to production values
 
-5. **Update Google OAuth**
-   - Add production callback URL to Google OAuth:
-   - `https://your-app.onrender.com/api/auth/google/callback`
+4. **Deploy**
+   - Click "Create Web Service"
+   - Wait for deployment to complete
 
-### Alternative: Docker Deployment
-
-1. **Build Docker Image**
-   ```bash
-   cd server
-   docker build -t codeloom-backend .
-   ```
-
-2. **Run with Docker Compose**
-   Create `docker-compose.yml`:
-   ```yaml
-   version: '3.8'
-   services:
-     backend:
-       build: ./server
-       ports:
-         - "5000:5000"
-       environment:
-         - NODE_ENV=production
-         - MONGODB_URI=mongodb://mongo:27017/codeloom
-         - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-         - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-         - JWT_SECRET=${JWT_SECRET}
-         - SESSION_SECRET=${SESSION_SECRET}
-         - CLIENT_URL=${CLIENT_URL}
-       depends_on:
-         - mongo
-     
-     mongo:
-       image: mongo:latest
-       ports:
-         - "27017:27017"
-       volumes:
-         - mongo_data:/data/db
-   
-   volumes:
-     mongo_data:
-   ```
-
-3. **Deploy**
-   ```bash
-   docker-compose up -d
-   ```
-
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-1. **OAuth Errors**
-   - Check Google OAuth redirect URIs
-   - Verify CLIENT_URL matches your frontend domain
-   - Ensure GOOGLE_CLIENT_ID and SECRET are correct
+1. **Firebase Authentication Errors**
+   - Verify Firebase config in client
+   - Check service account key in server
+   - Ensure domains are whitelisted in Firebase
 
-2. **Database Connection**
-   - Verify MONGODB_URI format
-   - Check MongoDB server is running
-   - For Atlas: check IP whitelist
+2. **MongoDB Connection Issues**
+   - Verify connection string format
+   - Check network access settings
+   - Ensure database user has correct permissions
 
-3. **CORS Issues**
-   - Verify CLIENT_URL in backend .env
-   - Check frontend API_URL points to correct backend
+3. **CORS Errors**
+   - Verify `CLIENT_URL` in server environment
+   - Check CORS configuration in server code
 
-4. **Build Failures**
-   - Clear node_modules and reinstall
-   - Check Node.js version compatibility
+4. **Build Errors**
+   - Clear `node_modules` and reinstall
+   - Check TypeScript configuration
    - Verify all environment variables are set
 
-### Performance Optimization
+### Development Tips
 
-1. **Frontend**
-   - Enable gzip compression
-   - Use CDN for static assets
-   - Implement code splitting
+- Use browser dev tools to debug frontend issues
+- Check server logs for backend errors
+- Use MongoDB Compass for database debugging
+- Test Firebase auth in incognito mode
 
-2. **Backend**
-   - Use Redis for session storage
-   - Implement database indexing
-   - Use connection pooling
+## 📚 Additional Resources
 
-### Security Considerations
+- [Firebase Documentation](https://firebase.google.com/docs)
+- [MongoDB Atlas Documentation](https://docs.atlas.mongodb.com/)
+- [React Documentation](https://reactjs.org/docs/)
+- [Node.js Documentation](https://nodejs.org/docs/)
+- [Socket.IO Documentation](https://socket.io/docs/)
 
-1. **Secrets Management**
-   - Never commit .env files
-   - Use strong, unique secrets
-   - Rotate secrets regularly
+## 🆘 Support
 
-2. **HTTPS**
-   - Always use HTTPS in production
-   - Update OAuth redirect URIs accordingly
+If you encounter issues:
 
-3. **Rate Limiting**
-   - Implement API rate limiting
-   - Add DDOS protection
+1. Check the troubleshooting section above
+2. Review environment variable configuration
+3. Check server and client console logs
+4. Verify all dependencies are installed correctly
+5. Ensure ports 5000 and 5173 are available
 
-## Support
-
-For issues and questions:
-1. Check this setup guide
-2. Review the troubleshooting section
-3. Check GitHub issues
-4. Create a new issue with detailed information
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
+For additional help, please check the project's GitHub issues or create a new one.

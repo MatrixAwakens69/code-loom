@@ -1,34 +1,43 @@
-import mongoose, { Document, Schema } from 'mongoose'
+import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IUser extends Document {
-  googleId: string
-  email: string
-  name: string
-  avatar?: string
-  createdAt: Date
-  updatedAt: Date
+  firebaseUid: string;
+  email: string;
+  name: string;
+  avatar?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const userSchema = new Schema<IUser>({
-  googleId: {
+  firebaseUid: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    index: true
   },
   email: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    lowercase: true,
+    trim: true
   },
   name: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   avatar: {
-    type: String
+    type: String,
+    default: undefined
   }
 }, {
   timestamps: true
-})
+});
 
-export const User = mongoose.model<IUser>('User', userSchema)
+// Create index for faster queries
+userSchema.index({ firebaseUid: 1 });
+userSchema.index({ email: 1 });
+
+export const User = mongoose.model<IUser>('User', userSchema);

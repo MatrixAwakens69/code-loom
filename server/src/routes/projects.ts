@@ -1,21 +1,27 @@
 import express from 'express'
-import { authenticateToken, AuthRequest } from '../middleware/auth'
+import { auth, AuthRequest } from '../middleware/auth'
 import { Project, IProject, IProjectInvite } from '../models/Project'
-import { User } from '../models/User'
+import { User, IUser } from '../models/User'
 import mongoose from 'mongoose'
 
 const router = express.Router()
 
 // Get all projects for user (owned + member of)
-router.get('/', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/', auth, async (req: AuthRequest, res) => {
   try {
-    const userId = req.user!._id
+    const userUid = req.user!.uid
+
+    // Find user by Firebase UID
+    const user = await User.findOne({ firebaseUid: userUid }) as IUser | null
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
 
     // Find projects where user is owner or member
     const projects = await Project.find({
       $or: [
-        { owner: userId },
-        { 'members.user': userId }
+        { owner: user._id },
+        { 'members.user': user._id }
       ]
     })
     .populate('owner', 'name email avatar')
@@ -30,7 +36,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
 })
 
 // Get user's invites
-router.get('/invites', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/invites', auth, async (req: AuthRequest, res) => {
   try {
     const userEmail = req.user!.email
 
@@ -64,15 +70,21 @@ router.get('/invites', authenticateToken, async (req: AuthRequest, res) => {
 })
 
 // Create new project
-router.post('/', authenticateToken, async (req: AuthRequest, res) => {
+router.post('/', auth, async (req: AuthRequest, res) => {
   try {
     const { name, description, isPublic } = req.body
-    const userId = req.user!._id
+    const userUid = req.user!.uid
+
+    // Find user by Firebase UID
+    const user = await User.findOne({ firebaseUid: userUid }) as IUser | null
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
 
     const project = new Project({
       name,
       description,
-      owner: userId,
+      owner: user._id,
       isPublic: isPublic || false,
       members: [],
       invites: [],
@@ -95,16 +107,22 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
 })
 
 // Get specific project
-router.get('/:projectId', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/:projectId', auth, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params
-    const userId = req.user!._id
+    const userUid = req.user!.uid
+
+    // Find user by Firebase UID
+    const user = await User.findOne({ firebaseUid: userUid }) as IUser | null
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
 
     const project = await Project.findOne({
       _id: projectId,
       $or: [
-        { owner: userId },
-        { 'members.user': userId },
+        { owner: user._id },
+        { 'members.user': user._id },
         { isPublic: true }
       ]
     })
@@ -116,8 +134,8 @@ router.get('/:projectId', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Check user permission
-    const isOwner = project.owner._id.toString() === userId.toString()
-    const member = project.members.find(m => m.user._id.toString() === userId.toString())
+    const isOwner = project.owner._id.toString() === user._id.toString()
+    const member = project.members.find(m => m.user._id.toString() === user._id.toString())
     const permission = isOwner ? 'edit' : member?.permission || 'view'
 
     res.json({ 
@@ -134,63 +152,74 @@ router.get('/:projectId', authenticateToken, async (req: AuthRequest, res) => {
 })
 
 // Invite user to project
-router.post('/:projectId/invite', authenticateToken, async (req: AuthRequest, res) => {
+router.post('/:projectId/invite', auth, async (req: AuthRequest, res) => {
   try {
     const { projectId } = req.params
     const { email, permission } = req.body
-    const userId = req.user!._id
+    const userUid = req.user!.uid
+
+    // Find user by Firebase UID
+    const user = await User.findOne({ firebaseUid: userUid }) as IUser | null
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
 
     const project = await Project.findOne({
       _id: projectId,
-      owner: userId
+      owner: user._id
     })
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found or not authorized' })
+      return res.status(404).json({ error: 'Project not found or access denied' })
     }
 
     // Check if user is already a member
     const existingMember = project.members.find(m => 
-      m.user.toString() === userId.toString()
+      m.user.toString() === user._id.toString()
     )
     
-    // Check if invite already exists
-    const existingInvite = project.invites.find(i => 
-      i.email === email && i.status === 'pending'
-    )
-
     if (existingMember) {
-      return res.status(400).json({ error: 'User is already a member' })
+      return res.status(400).json({ error: 'User is already a member of this project' })
     }
 
+    // Check if invite already exists
+    const existingInvite = project.invites.find(invite => 
+      invite.email === email && invite.status === 'pending'
+    )
+    
     if (existingInvite) {
-      return res.status(400).json({ error: 'Invite already sent' })
+      return res.status(400).json({ error: 'Invite already exists for this user' })
     }
 
-    const invite: IProjectInvite = {
+    // Add invite
+    project.invites.push({
       email,
       permission: permission || 'view',
-      invitedBy: userId,
+      invitedBy: user._id,
       invitedAt: new Date(),
       status: 'pending'
-    }
+    })
 
-    project.invites.push(invite)
     await project.save()
-
     res.json({ success: true, message: 'Invite sent successfully' })
   } catch (error) {
-    console.error('Invite user error:', error)
+    console.error('Send invite error:', error)
     res.status(500).json({ error: 'Failed to send invite' })
   }
 })
 
 // Accept/decline invite
-router.post('/invites/:inviteId/:action', authenticateToken, async (req: AuthRequest, res) => {
+router.post('/invites/:inviteId/:action', auth, async (req: AuthRequest, res) => {
   try {
     const { inviteId, action } = req.params
     const userEmail = req.user!.email
-    const userId = req.user!._id
+    const userUid = req.user!.uid
+
+    // Find user by Firebase UID
+    const user = await User.findOne({ firebaseUid: userUid }) as IUser | null
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
 
     if (!['accept', 'decline'].includes(action)) {
       return res.status(400).json({ error: 'Invalid action' })
@@ -206,7 +235,7 @@ router.post('/invites/:inviteId/:action', authenticateToken, async (req: AuthReq
       return res.status(404).json({ error: 'Invite not found' })
     }
 
-    const invite = project.invites.id(inviteId)
+    const invite = project.invites.find(inv => inv._id.toString() === inviteId)
     if (!invite) {
       return res.status(404).json({ error: 'Invite not found' })
     }
@@ -214,21 +243,20 @@ router.post('/invites/:inviteId/:action', authenticateToken, async (req: AuthReq
     if (action === 'accept') {
       // Add user to members
       project.members.push({
-        user: userId,
+        user: user._id,
         permission: invite.permission,
         joinedAt: new Date()
       })
-      invite.status = 'accepted'
-    } else {
-      invite.status = 'declined'
     }
 
-    await project.save()
+    // Update invite status
+    invite.status = action === 'accept' ? 'accepted' : 'declined'
+    
+    // Remove invite
+    project.invites = project.invites.filter(inv => inv._id.toString() !== inviteId)
 
-    res.json({ 
-      success: true, 
-      message: `Invite ${action}ed successfully` 
-    })
+    await project.save()
+    res.json({ success: true, message: `Invite ${action}ed successfully` })
   } catch (error) {
     console.error('Handle invite error:', error)
     res.status(500).json({ error: 'Failed to handle invite' })
@@ -236,54 +264,52 @@ router.post('/invites/:inviteId/:action', authenticateToken, async (req: AuthReq
 })
 
 // Update project file
-router.put('/:projectId/files/:filePath(*)', authenticateToken, async (req: AuthRequest, res) => {
+router.put('/:projectId/files/:filePath(*)', auth, async (req: AuthRequest, res) => {
   try {
     const { projectId, filePath } = req.params
     const { content, language } = req.body
-    const userId = req.user!._id
+    const userUid = req.user!.uid
+
+    // Find user by Firebase UID
+    const user = await User.findOne({ firebaseUid: userUid }) as IUser | null
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
 
     const project = await Project.findOne({
       _id: projectId,
       $or: [
-        { owner: userId },
-        { 'members.user': userId }
+        { owner: user._id },
+        { 'members.user': user._id }
       ]
     })
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found' })
+      return res.status(404).json({ error: 'Project not found or access denied' })
     }
 
     // Check if user has edit permission
-    const isOwner = project.owner.toString() === userId.toString()
-    const member = project.members.find(m => m.user.toString() === userId.toString())
+    const isOwner = project.owner.toString() === user._id.toString()
+    const member = project.members.find(m => m.user.toString() === user._id.toString())
     const hasEditPermission = isOwner || member?.permission === 'edit'
 
     if (!hasEditPermission) {
       return res.status(403).json({ error: 'Edit permission required' })
     }
 
-    const decodedPath = `/${filePath}`
-    let file = project.files.find(f => f.path === decodedPath)
-
-    if (file) {
-      file.content = content
-      if (language) file.language = language
-      file.updatedAt = new Date()
-    } else {
-      // Create new file
-      project.files.push({
-        name: filePath.split('/').pop() || 'untitled',
-        path: decodedPath,
-        content,
-        language: language || 'javascript',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      })
+    // Find and update file
+    const fileIndex = project.files.findIndex(f => f.path === filePath)
+    if (fileIndex === -1) {
+      return res.status(404).json({ error: 'File not found' })
     }
 
-    await project.save()
+    project.files[fileIndex].content = content
+    if (language) {
+      project.files[fileIndex].language = language
+    }
+    project.files[fileIndex].updatedAt = new Date()
 
+    await project.save()
     res.json({ success: true, message: 'File updated successfully' })
   } catch (error) {
     console.error('Update file error:', error)

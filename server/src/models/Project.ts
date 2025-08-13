@@ -1,12 +1,12 @@
 import mongoose, { Document, Schema } from 'mongoose'
 
-export interface IProjectMember {
+export interface IProjectMember extends Document {
   user: mongoose.Types.ObjectId
   permission: 'view' | 'edit'
   joinedAt: Date
 }
 
-export interface IProjectInvite {
+export interface IProjectInvite extends Document {
   email: string
   permission: 'view' | 'edit'
   invitedBy: mongoose.Types.ObjectId
@@ -14,7 +14,7 @@ export interface IProjectInvite {
   status: 'pending' | 'accepted' | 'declined'
 }
 
-export interface IProjectFile {
+export interface IProjectFile extends Document {
   name: string
   path: string
   content: string

@@ -1,50 +1,47 @@
-import express from 'express'
-import passport from 'passport'
-import { generateToken, authenticateToken, AuthRequest } from '../middleware/auth'
+import { Router, Request, Response } from 'express';
+import { User } from '../models/User';
+import { auth, AuthRequest } from '../middleware/auth';
 
-const router = express.Router()
-
-// Google OAuth login
-router.get('/google', 
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-)
-
-// Google OAuth callback
-router.get('/google/callback',
-  passport.authenticate('google', { session: false }),
-  (req, res) => {
-    try {
-      const user = req.user as any
-      if (!user) {
-        return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`)
-      }
-
-      const token = generateToken(user._id.toString())
-      res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`)
-    } catch (error) {
-      console.error('OAuth callback error:', error)
-      res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`)
-    }
-  }
-)
+const router = Router();
 
 // Get current user
-router.get('/me', authenticateToken, (req: AuthRequest, res) => {
-  res.json({
-    success: true,
-    user: {
-      id: req.user!._id,
-      email: req.user!.email,
-      name: req.user!.name,
-      avatar: req.user!.avatar,
-      googleId: req.user!.googleId
+router.get('/me', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
     }
-  })
-})
 
-// Logout
-router.post('/logout', authenticateToken, (req: AuthRequest, res) => {
-  res.json({ success: true, message: 'Logged out successfully' })
-})
+    // Find or create user in our database
+    let user = await User.findOne({ firebaseUid: req.user.uid });
+    
+    if (!user) {
+      // Create new user if they don't exist
+      user = new User({
+        firebaseUid: req.user.uid,
+        email: req.user.email,
+        name: req.user.name || req.user.email?.split('@')[0] || 'User',
+        avatar: req.user.picture,
+      });
+      await user.save();
+    }
 
-export default router
+    res.json({ user });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Logout (client-side Firebase handles this, but we can clear server-side data if needed)
+router.post('/logout', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    // Firebase handles logout on the client side
+    // Here you can add any server-side cleanup if needed
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+export default router;
